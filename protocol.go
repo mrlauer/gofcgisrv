@@ -203,4 +203,3 @@ func writeBeginRequest(w io.Writer, reqId requestId, role uint16, flags byte) er
 	content := [8]byte{byte(role >> 8), byte(role & 0xff), flags, 0, 0, 0, 0, 0}
 	return writeRecord(w, record{fcgiBeginRequest, reqId, content[:]})
 }
-
