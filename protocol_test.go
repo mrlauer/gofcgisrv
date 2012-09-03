@@ -28,6 +28,14 @@ func TestWriteRecord(t *testing.T) {
 			},
 			[]byte{1, 3, 0, 1, 0, 8, 0, 0},
 		},
+		{
+			record{
+				Type:    3,
+				Id:      1,
+				Content: nil,
+			},
+			[]byte{1, 3, 0, 1, 0, 0, 0, 0},
+		},
 	}
 	for _, d := range data {
 		rec := d.rec

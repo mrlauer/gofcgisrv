@@ -113,9 +113,11 @@ func readRecord(r io.Reader) (record, error) {
 	if _, err := r.Read(pad[:1]); err != nil {
 		return rec, err
 	}
-	rec.Content = make([]byte, clength)
-	if _, err := r.Read(rec.Content); err != nil {
-		return rec, err
+	if clength != 0 {
+		rec.Content = make([]byte, clength)
+		if _, err := r.Read(rec.Content); err != nil {
+			return rec, err
+		}
 	}
 	if plength != 0 {
 		if _, err := r.Read(pad[:plength]); err != nil {
