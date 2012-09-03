@@ -6,6 +6,7 @@ import (
 	"sync"
 )
 
+// streamReader is really sort of a piper. Maybe
 type streamReader struct {
 	buffer  bytes.Buffer
 	lock    sync.Mutex
@@ -49,4 +50,36 @@ func (sr *streamReader) Close() error {
 	sr.err = io.EOF
 	sr.gotData.Signal()
 	return nil
+}
+
+// streamWriter writes data as FCGI records.
+type streamWriter struct {
+	w    io.Writer
+	tp   recordType
+	id   requestId
+	lock sync.Mutex
+}
+
+func newStreamWriter(w io.Writer, tp recordType, id requestId) *streamWriter {
+	return &streamWriter{w: w, tp: tp, id: id}
+}
+
+func (sw *streamWriter) Write(data []byte) (int, error) {
+	sw.lock.Lock()
+	defer sw.lock.Unlock()
+	if len(data) == 0 {
+		return 0, nil
+	}
+	rec := record{sw.tp, sw.id, data}
+	err := writeRecord(sw.w, rec)
+	// How much did we actually write? Just say nothing if we got an error.
+	if err != nil {
+		return 0, err
+	}
+	return len(data), nil
+}
+
+func (sw *streamWriter) Close() error {
+	// Close means writing an empty string
+	return writeRecord(sw.w, record{sw.tp, sw.id, nil})
 }

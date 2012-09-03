@@ -1,6 +1,7 @@
 package gofcgisrv
 
 import (
+	"bytes"
 	"io"
 	"io/ioutil"
 	"strings"
@@ -47,5 +48,24 @@ func TestStreamReader(t *testing.T) {
 	read, err := ioutil.ReadAll(sr)
 	if err != nil || string(read) != ssj {
 		t.Errorf("Read %s with error %v", read, err)
+	}
+}
+
+func TestStreamWriter(t *testing.T) {
+	var buffer bytes.Buffer
+	sw := newStreamWriter(&buffer, fcgiStdout, 3)
+	io.WriteString(sw, "Foo!")
+	io.WriteString(sw, "This is data")
+	io.WriteString(sw, "\000\001abc")
+	sw.Close()
+
+	expected := "\001\006\000\003\000\004\004\000Foo!\000\000\000\000" +
+		"\001\006\000\003\000\x0c\004\000This is data\000\000\000\000" +
+		"\001\006\000\003\000\x05\003\000\000\001abc\000\000\000" +
+		"\001\006\000\003\000\x00\000\000"
+
+	str := string(buffer.Bytes())
+	if str != expected {
+		t.Errorf("Got\n%q\nnot\n%q", str, expected)
 	}
 }
