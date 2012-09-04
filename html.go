@@ -22,7 +22,9 @@ func HTTPEnv(start []string, r *http.Request) []string {
 	appendEnv("GATEWAY_INTERFACE", "CGI/1.1")
 	appendEnv("REQUEST_URI", r.URL.String())
 
-	appendEnv("QUERY_STRING", r.URL.RawQuery)
+	if len(r.URL.RawQuery) > 0 {
+		appendEnv("QUERY_STRING", r.URL.RawQuery)
+	}
 	if t := r.Header.Get("Content-type"); t != "" {
 		appendEnv("CONTENT_TYPE", t)
 	}

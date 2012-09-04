@@ -151,19 +151,21 @@ func readPairLen(r io.Reader) (int, error) {
 }
 
 func writeNameValue(w io.Writer, name, value string) error {
-	if err := writePairLen(w, len(name)); err != nil {
+	buffer := bytes.NewBuffer(nil)
+	if err := writePairLen(buffer, len(name)); err != nil {
 		return err
 	}
-	if err := writePairLen(w, len(value)); err != nil {
+	if err := writePairLen(buffer, len(value)); err != nil {
 		return err
 	}
-	if _, err := io.WriteString(w, name); err != nil {
+	if _, err := io.WriteString(buffer, name); err != nil {
 		return err
 	}
-	if _, err := io.WriteString(w, value); err != nil {
+	if _, err := io.WriteString(buffer, value); err != nil {
 		return err
 	}
-	return nil
+	_, err := io.Copy(w, buffer)
+	return err
 }
 
 func readNameValue(r io.Reader) (name, value string, err error) {

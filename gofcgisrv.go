@@ -30,6 +30,10 @@ type Server struct {
 	mpx         bool
 	maxConns    int
 	maxRequests int
+
+	// PHP barfs on FCGI_GET_VALUES. I don't know why. Maybe it expects a different connection.
+	// For now don't do it unless asked.
+	GetValues bool
 }
 
 // NewServer creates a server that will attempt to connect to the application at the given address over TCP.
@@ -51,7 +55,9 @@ func (s *Server) Request(env []string, stdin io.Reader, stdout io.Writer, stderr
 	}
 
 	// If we haven't initialized ourselves, it's time to do that.
-	writeGetValues(r.conn.netconn, fcgiMaxConns, fcgiMaxReqs, fcgiMpxsConns)
+	if s.GetValues {
+		writeGetValues(r.conn.netconn, fcgiMaxConns, fcgiMaxReqs, fcgiMpxsConns, "foo")
+	}
 
 	// Send BeginRequest.
 	writeBeginRequest(r.conn.netconn, r.id, fcgiResponder, 0)
