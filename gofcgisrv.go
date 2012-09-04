@@ -27,22 +27,68 @@ type Server struct {
 	initialized     bool
 
 	// Parameters of the application
-	mpx         bool
-	maxConns    int
-	maxRequests int
-
-	// PHP barfs on FCGI_GET_VALUES. I don't know why. Maybe it expects a different connection.
-	// For now don't do it unless asked.
-	GetValues bool
+	CanMultiplex bool
+	MaxConns     int
+	MaxRequests  int
 }
 
 // NewServer creates a server that will attempt to connect to the application at the given address over TCP.
 func NewServer(applicationAddr string) *Server {
 	s := &Server{applicationAddr: applicationAddr}
-	s.maxConns = 1
-	s.maxRequests = 1
+	s.MaxConns = 1
+	s.MaxRequests = 1
 	s.reqCond = sync.NewCond(&s.reqLock)
 	return s
+}
+
+func (s *Server) processGetValuesResult(rec record) (int, error) {
+	nproc := 0
+	switch rec.Type {
+	case fcgiGetValuesResult:
+		reader := bytes.NewReader(rec.Content)
+		for {
+			name, value, err := readNameValue(reader)
+			if err != nil {
+				return nproc, err
+			}
+			val, err := strconv.ParseInt(value, 10, 32)
+			if err != nil {
+				return nproc, err
+			}
+			nproc++
+			switch name {
+			case fcgiMaxConns:
+				s.MaxConns = int(val)
+			case fcgiMaxReqs:
+				s.MaxRequests = int(val)
+			case fcgiMpxsConns:
+				s.CanMultiplex = (val != 0)
+			}
+		}
+	}
+	return nproc, nil
+}
+
+// PHP barfs on FCGI_GET_VALUES. I don't know why. Maybe it expects a different connection.
+// For now don't do it unless asked.
+func (s *Server) GetValues() error {
+	c, err := net.Dial("tcp", s.applicationAddr)
+	if err != nil {
+		return err
+	}
+	//	  time.AfterFunc(time.Second, func() { c.Close()})
+	writeGetValues(c, fcgiMpxsConns, fcgiMaxReqs, fcgiMaxConns)
+	n := 0
+	for n < 3 {
+		rec, err := readRecord(c)
+		if err != nil {
+			return nil
+		}
+		np, _ := s.processGetValuesResult(rec)
+		n += np
+	}
+	c.Close()
+	return nil
 }
 
 // Request executes a request using env and stdin as inputs and stdout and stderr as outputs.
@@ -52,11 +98,6 @@ func (s *Server) Request(env []string, stdin io.Reader, stdout io.Writer, stderr
 	r, err := s.newRequest()
 	if err != nil {
 		return err
-	}
-
-	// If we haven't initialized ourselves, it's time to do that.
-	if s.GetValues {
-		writeGetValues(r.conn.netconn, fcgiMaxConns, fcgiMaxReqs, fcgiMpxsConns, "foo")
 	}
 
 	// Send BeginRequest.
@@ -107,7 +148,7 @@ func (s *Server) newRequest() (*request, error) {
 	// We may have to wait for one to become available
 	s.reqLock.Lock()
 	defer s.reqLock.Unlock()
-	for s.numRequests() > s.maxRequests {
+	for s.numRequests() >= s.MaxRequests {
 		s.reqCond.Wait()
 	}
 	// We will always need to create a new connection, for now.
@@ -208,25 +249,7 @@ func (c *conn) Run() error {
 		if rec.Id == 0 {
 			switch rec.Type {
 			case fcgiGetValuesResult:
-				reader := bytes.NewReader(rec.Content)
-				for {
-					name, value, err := readNameValue(reader)
-					if err != nil {
-						break
-					}
-					val, err := strconv.ParseInt(value, 10, 32)
-					if err != nil {
-						continue
-					}
-					switch name {
-					case fcgiMaxConns:
-						c.server.maxConns = int(val)
-					case fcgiMaxReqs:
-						c.server.maxRequests = int(val)
-					case fcgiMpxsConns:
-						c.server.mpx = (val != 0)
-					}
-				}
+				c.server.processGetValuesResult(rec)
 			}
 		} else {
 			// Get the request.
