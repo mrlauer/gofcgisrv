@@ -20,6 +20,7 @@ const (
 	fcgiParams
 	fcgiStdin
 	fcgiStdout
+	fcgiStderr
 	fcgiData
 	fcgiGetValues
 	fcgiGetValuesResult
@@ -193,12 +194,12 @@ func readNameValue(r io.Reader) (name, value string, err error) {
 	return name, value, nil
 }
 
-func writeGetValues(w io.Writer, reqId requestId, names ...string) error {
+func writeGetValues(w io.Writer, names ...string) error {
 	buffer := bytes.NewBuffer(nil)
 	for _, name := range names {
 		writeNameValue(buffer, name, "")
 	}
-	return writeRecord(w, record{fcgiGetValues, reqId, buffer.Bytes()})
+	return writeRecord(w, record{fcgiGetValues, 0, buffer.Bytes()})
 }
 
 func writeBeginRequest(w io.Writer, reqId requestId, role uint16, flags byte) error {
