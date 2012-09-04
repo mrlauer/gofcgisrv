@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -31,6 +32,7 @@ type Server struct {
 	maxRequests int
 }
 
+// NewServer creates a server that will attempt to connect to the application at the given address over TCP.
 func NewServer(applicationAddr string) *Server {
 	s := &Server{applicationAddr: applicationAddr}
 	s.maxConns = 1
@@ -74,6 +76,16 @@ func (s *Server) Request(env []string, stdin io.Reader, stdout io.Writer, stderr
 	// Wait for end request.
 	<-r.done
 	return nil
+}
+
+// ServeHTTP serves an HTTP request.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	env := HTTPEnv(nil, r)
+	buffer := bytes.NewBuffer(nil)
+	s.Request(env, r.Body, buffer, buffer)
+
+	// Add any headers produced by the application, and skip to the response.
+	ProcessResponse(buffer, w, r)
 }
 
 // Should only be called if reqLock is held.
