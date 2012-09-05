@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 var logger *log.Logger = log.New(os.Stderr, "", 0)
@@ -73,6 +74,7 @@ func (s *Server) processGetValuesResult(rec record) (int, error) {
 // For now don't do it unless asked.
 func (s *Server) GetValues() error {
 	c, err := net.Dial("tcp", s.applicationAddr)
+	time.AfterFunc(time.Second, func() { c.Close() })
 	if err != nil {
 		return err
 	}
@@ -221,6 +223,18 @@ func (c *conn) removeRequest(r *request) {
 	}
 }
 
+func (c *conn) releaseAllRequests() {
+	c.reqLock.Lock()
+	var reqs []*request
+	reqs = append(reqs, c.requests...)
+	c.reqLock.Unlock()
+	for _, r := range reqs {
+		if r != nil {
+			c.server.releaseRequest(r)
+		}
+	}
+}
+
 func (c *conn) numRequests() int {
 	c.reqLock.Lock()
 	defer c.reqLock.Unlock()
@@ -243,6 +257,7 @@ func (c *conn) Run() error {
 		rec, err := readRecord(c.netconn)
 		if err != nil {
 			// We're done?
+			c.releaseAllRequests()
 			return err
 		}
 		// If it's a management record
