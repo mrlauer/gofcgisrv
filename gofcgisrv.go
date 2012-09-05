@@ -96,7 +96,7 @@ func (s *Server) GetValues() error {
 // Request executes a request using env and stdin as inputs and stdout and stderr as outputs.
 // env should be a slice of name=value pairs. It blocks until the application has finished.
 func (s *Server) Request(env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
-	// Get a request. We may have to wait for one to freed up.
+	// Get a request. We may have to wait for one to free up.
 	r, err := s.newRequest()
 	if err != nil {
 		return err

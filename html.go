@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/textproto"
 	"strings"
@@ -22,6 +23,13 @@ func HTTPEnv(start []string, r *http.Request) []string {
 	appendEnv("SERVER_PROTOCOL", "HTTP/1.1")
 	appendEnv("GATEWAY_INTERFACE", "CGI/1.1")
 	appendEnv("REQUEST_URI", r.URL.String())
+
+	host, port, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		host, port = r.Host, "80"
+	}
+	appendEnv("SERVER_NAME", host)
+	appendEnv("SERVER_PORT", port)
 
 	if len(r.URL.RawQuery) > 0 {
 		appendEnv("QUERY_STRING", r.URL.RawQuery)
@@ -47,6 +55,10 @@ func ProcessResponse(stdout io.Reader, w http.ResponseWriter, r *http.Request) {
 	bufReader := bufio.NewReader(stdout)
 	mimeReader := textproto.NewReader(bufReader)
 	hdr, err := mimeReader.ReadMIMEHeader()
+	if err != nil {
+		// We got nothing! Assume there is an error. Should be more robust.
+		return
+	}
 	if err == nil {
 		for k, vals := range hdr {
 			for _, v := range vals {
