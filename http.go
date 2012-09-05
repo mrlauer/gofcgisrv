@@ -2,6 +2,7 @@ package gofcgisrv
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -47,6 +48,27 @@ func HTTPEnv(start []string, r *http.Request) []string {
 		appendEnv(cgikey, r.Header.Get(key))
 	}
 	return env
+}
+
+func ServeHTTP(s *Server, env []string, w http.ResponseWriter, r *http.Request) {
+	env = HTTPEnv(env, r)
+
+	outreader, outwriter := io.Pipe()
+	stderr := bytes.NewBuffer(nil)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer outwriter.Close()
+		err := s.Request(env, r.Body, outwriter, stderr)
+		if err != nil {
+			// There should not be anything in stdout. We should really guard against that.
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}()
+
+	// Add any headers produced by the application, and skip to the response.
+	ProcessResponse(outreader, w, r)
+	<-done
 }
 
 // ProcessResponse adds any returned header data to the response header and sends the rest
