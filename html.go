@@ -2,6 +2,7 @@ package gofcgisrv
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"net/http"
 	"net/textproto"
@@ -53,5 +54,15 @@ func ProcessResponse(stdout io.Reader, w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	statusCode := http.StatusOK
+	if status := hdr.Get("Status"); status != "" {
+		delete(hdr, "Status")
+		// Parse the status code
+		var code int
+		if n, _ := fmt.Sscanf(status, "%d", &code); n == 1 {
+			statusCode = int(code)
+		}
+	}
+	w.WriteHeader(statusCode)
 	io.Copy(w, bufReader)
 }
