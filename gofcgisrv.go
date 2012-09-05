@@ -168,6 +168,8 @@ func (s *Server) releaseRequest(r *request) {
 	defer s.reqLock.Unlock()
 	r.conn.removeRequest(r)
 	// For now, we're telling apps to close connections, so we're done with it.
+	// But we're not trusting apps to do it, because not all of them do, the bastards.
+	r.conn.netconn.Close()
 	for i, c := range s.connections {
 		if c == r.conn {
 			s.connections = append(s.connections[:i], s.connections[i+1:]...)

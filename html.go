@@ -56,13 +56,14 @@ func ProcessResponse(stdout io.Reader, w http.ResponseWriter, r *http.Request) {
 	}
 	statusCode := http.StatusOK
 	if status := hdr.Get("Status"); status != "" {
-		delete(hdr, "Status")
+		delete(w.Header(), "Status")
 		// Parse the status code
 		var code int
 		if n, _ := fmt.Sscanf(status, "%d", &code); n == 1 {
 			statusCode = int(code)
 		}
 	}
+	// Are there other fields we need to rewrite? Probably!
 	w.WriteHeader(statusCode)
 	io.Copy(w, bufReader)
 }
