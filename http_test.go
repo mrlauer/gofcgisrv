@@ -47,7 +47,7 @@ func brokenRequester(env []string, stdin io.Reader, stdout io.Writer, stderr io.
 	return errors.New(_brokenReqError)
 }
 
-func makeHandler(f RequesterFunc) http.Handler {
+func makeHandler(f Requester) http.Handler {
 	serve := func(w http.ResponseWriter, r *http.Request) {
 		env := HTTPEnv(nil, r)
 		ServeHTTP(f, env, w, r)
@@ -57,7 +57,8 @@ func makeHandler(f RequesterFunc) http.Handler {
 
 type httpTestData struct {
 	name     string
-	f        RequesterFunc
+	url      string
+	f        Requester
 	body     io.Reader
 	status   int
 	expected string
@@ -86,21 +87,21 @@ func TestHttp(t *testing.T) {
 	data := []httpTestData{
 		{
 			name:     "echo",
-			f:        echoRequester,
+			f:        RequesterFunc(echoRequester),
 			body:     strings.NewReader("This is a test"),
 			status:   200,
 			expected: "This is a test",
 		},
 		{
 			name:     "echo (different reader)",
-			f:        echoRequester,
+			f:        RequesterFunc(echoRequester),
 			body:     bufio.NewReader(strings.NewReader("This is a test")),
 			status:   200,
 			expected: "This is a test",
 		},
 		{
 			name:     "broken",
-			f:        brokenRequester,
+			f:        RequesterFunc(brokenRequester),
 			body:     strings.NewReader("This is a test"),
 			status:   500,
 			expected: _brokenReqError + "\n",
