@@ -38,9 +38,6 @@ func HTTPEnv(start []string, r *http.Request) []string {
 	if t := r.Header.Get("Content-type"); t != "" {
 		appendEnv("CONTENT_TYPE", t)
 	}
-	if l := r.Header.Get("Content-length"); l != "" {
-		appendEnv("CONTENT_LENGTH", l)
-	}
 
 	for key := range r.Header {
 		upper := strings.ToUpper(key)
@@ -54,13 +51,30 @@ func HTTPEnv(start []string, r *http.Request) []string {
 func ServeHTTP(s Requester, env []string, w http.ResponseWriter, r *http.Request) {
 	env = HTTPEnv(env, r)
 
+	var body io.Reader = r.Body
+	// CONTENT_LENGTH is special and important
+	if l := r.Header.Get("Content-length"); l != "" {
+		env = append(env, "CONTENT_LENGTH="+l)
+	} else if r.Body != nil {
+		// Some different transfer-encoding, presumably.
+		// Read the body into a buffer
+		// If there is an error we'll just ignore it for now.
+		buf := bytes.NewBuffer(nil)
+		io.Copy(buf, r.Body)
+		r.Body.Close()
+		body = buf
+		env = append(env, fmt.Sprintf("CONTENT_LENGTH=%d", buf.Len()))
+	} else {
+		env = append(env, "CONTENT_LENGTH=0")
+	}
+
 	outreader, outwriter := io.Pipe()
 	stderr := bytes.NewBuffer(nil)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		defer outwriter.Close()
-		err := s.Request(env, r.Body, outwriter, stderr)
+		err := s.Request(env, body, outwriter, stderr)
 		if err != nil {
 			// There should not be anything in stdout. We should really guard against that.
 			http.Error(w, err.Error(), http.StatusInternalServerError)

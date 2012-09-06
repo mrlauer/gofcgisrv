@@ -1,6 +1,7 @@
 package gofcgisrv
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -12,10 +13,27 @@ import (
 )
 
 func echoRequester(env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
+
 	body, err := ioutil.ReadAll(stdin)
 	if err != nil {
 		return err
 	}
+	bodyLen := len(body)
+	// Find the content-length and make sure it matches
+	clen := -1
+	for _, e := range env {
+		n, _ := fmt.Sscanf(e, "CONTENT_LENGTH=%d", &clen)
+		if n == 1 {
+			break
+		}
+	}
+	if clen == -1 {
+		return errors.New("No content-length")
+	}
+	if clen != bodyLen {
+		return fmt.Errorf("CONTENT_LENGTH %d, body length %d", clen, bodyLen)
+	}
+
 	io.WriteString(stdout, "Status: 200 OK\r\n")
 	fmt.Fprintf(stdout, "Content-Length: %d\r\n", len(body))
 	fmt.Fprintf(stdout, "\r\n")
@@ -40,7 +58,7 @@ func makeHandler(f RequesterFunc) http.Handler {
 type httpTestData struct {
 	name     string
 	f        RequesterFunc
-	body     string
+	body     io.Reader
 	status   int
 	expected string
 }
@@ -50,7 +68,7 @@ func testRequester(t *testing.T, data httpTestData) {
 	defer server.Close()
 
 	url := server.URL + "/test"
-	resp, err := http.Post(url, "text/plain", strings.NewReader(data.body))
+	resp, err := http.Post(url, "text/plain", data.body)
 	if err != nil {
 		t.Errorf("Error in post %s: %v", data.name, err)
 		return
@@ -69,14 +87,21 @@ func TestHttp(t *testing.T) {
 		{
 			name:     "echo",
 			f:        echoRequester,
-			body:     "This is a test",
+			body:     strings.NewReader("This is a test"),
+			status:   200,
+			expected: "This is a test",
+		},
+		{
+			name:     "echo (different reader)",
+			f:        echoRequester,
+			body:     bufio.NewReader(strings.NewReader("This is a test")),
 			status:   200,
 			expected: "This is a test",
 		},
 		{
 			name:     "broken",
 			f:        brokenRequester,
-			body:     "This is a test",
+			body:     strings.NewReader("This is a test"),
 			status:   500,
 			expected: _brokenReqError + "\n",
 		},
