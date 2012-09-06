@@ -13,7 +13,6 @@ import (
 )
 
 func echoRequester(env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
-
 	body, err := ioutil.ReadAll(stdin)
 	if err != nil {
 		return err
@@ -47,9 +46,9 @@ func brokenRequester(env []string, stdin io.Reader, stdout io.Writer, stderr io.
 	return errors.New(_brokenReqError)
 }
 
-func makeHandler(f Requester) http.Handler {
+func makeHandler(f Requester, env []string) http.Handler {
 	serve := func(w http.ResponseWriter, r *http.Request) {
-		env := HTTPEnv(nil, r)
+		env := HTTPEnv(env, r)
 		ServeHTTP(f, env, w, r)
 	}
 	return http.HandlerFunc(serve)
@@ -58,6 +57,7 @@ func makeHandler(f Requester) http.Handler {
 type httpTestData struct {
 	name     string
 	url      string
+	env      []string
 	f        Requester
 	body     io.Reader
 	status   int
@@ -65,7 +65,7 @@ type httpTestData struct {
 }
 
 func testRequester(t *testing.T, data httpTestData) {
-	server := httptest.NewServer(makeHandler(data.f))
+	server := httptest.NewServer(makeHandler(data.f, data.env))
 	defer server.Close()
 
 	url := server.URL + "/test"
