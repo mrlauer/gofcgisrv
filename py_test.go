@@ -1,3 +1,5 @@
+// +build all
+
 package gofcgisrv
 
 import (
@@ -9,7 +11,7 @@ import (
 )
 
 func TestPyServer(t *testing.T) {
-	cmd := exec.Command("python", "./testdata/cgi_test.py")
+	cmd := exec.Command("python", "./testdata/cgi_test.py", "--port=9001")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err := cmd.Start()
@@ -20,7 +22,7 @@ func TestPyServer(t *testing.T) {
 	defer cmd.Process.Kill()
 
 	time.Sleep(time.Millisecond * 90)
-	s := NewServer("127.0.0.1:9000")
+	s := NewServer("127.0.0.1:9001")
 	testRequester(t, httpTestData{
 		name:     "py",
 		f:        s,
