@@ -50,7 +50,8 @@ func HTTPEnv(start []string, r *http.Request) []string {
 	return env
 }
 
-func ServeHTTP(s *Server, env []string, w http.ResponseWriter, r *http.Request) {
+// ServeHTTP serves an http request using FastCGI
+func ServeHTTP(s Requester, env []string, w http.ResponseWriter, r *http.Request) {
 	env = HTTPEnv(env, r)
 
 	outreader, outwriter := io.Pipe()
@@ -73,13 +74,13 @@ func ServeHTTP(s *Server, env []string, w http.ResponseWriter, r *http.Request) 
 
 // ProcessResponse adds any returned header data to the response header and sends the rest
 // to the response body.
-func ProcessResponse(stdout io.Reader, w http.ResponseWriter, r *http.Request) {
+func ProcessResponse(stdout io.Reader, w http.ResponseWriter, r *http.Request) error {
 	bufReader := bufio.NewReader(stdout)
 	mimeReader := textproto.NewReader(bufReader)
 	hdr, err := mimeReader.ReadMIMEHeader()
 	if err != nil {
 		// We got nothing! Assume there is an error. Should be more robust.
-		return
+		return err
 	}
 	if err == nil {
 		for k, vals := range hdr {
@@ -100,4 +101,5 @@ func ProcessResponse(stdout io.Reader, w http.ResponseWriter, r *http.Request) {
 	// Are there other fields we need to rewrite? Probably!
 	w.WriteHeader(statusCode)
 	io.Copy(w, bufReader)
+	return nil
 }

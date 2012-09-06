@@ -18,6 +18,18 @@ import (
 
 var logger *log.Logger = log.New(os.Stderr, "", 0)
 
+// Requester is the interface for any CGI-like protocol server.
+type Requester interface {
+	Request(env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
+}
+
+// Wrapper for functions
+type RequesterFunc func(env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
+
+func (f RequesterFunc) Request(env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
+	return f(env, stdin, stdout, stderr)
+}
+
 // Server is the external interface. It manages connections to a single FastCGI application.
 // A server may maintain many connections, each of which may multiplex many requests.
 type Server struct {
