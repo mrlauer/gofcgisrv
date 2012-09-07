@@ -1,5 +1,9 @@
 /*
-Package gofcgisrv implements the webserver side of the FastCGI protocol.
+Package gofcgisrv implements the webserver side of the CGI, FastCGI, and SCGI protocols.
+
+CGI: http://tools.ietf.org/html/rfc3875
+FastCGI: http://www.fastcgi.com/drupal/node/6?q=node/22
+SCGI: http://python.ca/scgi/protocol.txt protocols.
 */
 package gofcgisrv
 
