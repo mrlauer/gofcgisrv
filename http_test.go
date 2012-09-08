@@ -2,12 +2,16 @@ package gofcgisrv
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -44,6 +48,28 @@ var _brokenReqError string = "There seems to have been some kind of mistake."
 
 func brokenRequester(env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
 	return errors.New(_brokenReqError)
+}
+
+func headerRequester(env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
+	re := regexp.MustCompile(`^(\w+)=(.*)`)
+	envMap := make(map[string]string)
+	for _, e := range env {
+		matches := re.FindStringSubmatch(e)
+		if len(matches) == 3 {
+			k, v := matches[1], matches[2]
+			envMap[k] = v
+		}
+	}
+	js, err := json.Marshal(envMap)
+	if err != nil {
+		return err
+	}
+	io.WriteString(stdout, "Status: 200 OK\r\n")
+	io.WriteString(stdout, "Content-Type: application/json;charset=UTF-8\r\n")
+	fmt.Fprintf(stdout, "Content-Length: %d\n", len(js))
+	io.WriteString(stdout, "\r\n")
+	stdout.Write(js)
+	return nil
 }
 
 func makeHandler(f Requester, env []string) http.Handler {
@@ -109,5 +135,43 @@ func TestHttp(t *testing.T) {
 	}
 	for _, d := range data {
 		testRequester(t, d)
+	}
+}
+
+func TestHeaders(t *testing.T) {
+	server := httptest.NewServer(makeHandler(RequesterFunc(headerRequester), []string{"FOO=BAR"}))
+	defer server.Close()
+
+	requrl := server.URL + "/?foo=bar"
+	parsedUrl, _ := url.Parse(requrl)
+	host, port, _ := net.SplitHostPort(parsedUrl.Host)
+
+	resp, err := http.Get(requrl)
+	if err != nil {
+		t.Errorf("Error in get: %v", err)
+		return
+	}
+	if resp.StatusCode != 200 {
+		t.Errorf("status was %d, not %d", resp.StatusCode, 200)
+	}
+	var envMap map[string]string
+	err = json.NewDecoder(resp.Body).Decode(&envMap)
+	if err != nil {
+		t.Errorf("decode error: %v\n", err)
+	}
+	data := []struct{ key, value string }{
+		{"FOO", "BAR"},
+		{"SERVER_PROTOCOL", "HTTP/1.1"},
+		{"GATEWAY_INTERFACE", "CGI/1.1"},
+		{"CONTENT_LENGTH", "0"},
+		{"SERVER_NAME", host},
+		{"SERVER_PORT", port},
+		{"QUERY_STRING", "foo=bar"},
+	}
+	for _, d := range data {
+		v := envMap[d.key]
+		if v != d.value {
+			t.Errorf("env[%s] was %s, not %s", d.key, v, d.value)
+		}
 	}
 }
