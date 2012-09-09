@@ -29,7 +29,7 @@ func HTTPEnv(start []string, r *http.Request) []string {
 	if err != nil {
 		host, port = r.Host, "80"
 	}
-	appendEnv("REOMTE_ADDR", r.RemoteAddr)
+	appendEnv("REMOTE_ADDR", r.RemoteAddr)
 	appendEnv("SERVER_NAME", host)
 	appendEnv("SERVER_PORT", port)
 

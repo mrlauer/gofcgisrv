@@ -142,7 +142,7 @@ func TestHeaders(t *testing.T) {
 	server := httptest.NewServer(makeHandler(RequesterFunc(headerRequester), []string{"FOO=BAR"}))
 	defer server.Close()
 
-	requrl := server.URL + "/?foo=bar"
+	requrl := server.URL + "/?foo=bar%20baz"
 	parsedUrl, _ := url.Parse(requrl)
 	host, port, _ := net.SplitHostPort(parsedUrl.Host)
 
@@ -166,12 +166,15 @@ func TestHeaders(t *testing.T) {
 		{"CONTENT_LENGTH", "0"},
 		{"SERVER_NAME", host},
 		{"SERVER_PORT", port},
-		{"QUERY_STRING", "foo=bar"},
+		{"QUERY_STRING", "foo=bar%20baz"},
 	}
 	for _, d := range data {
 		v := envMap[d.key]
 		if v != d.value {
 			t.Errorf("env[%s] was %s, not %s", d.key, v, d.value)
 		}
+	}
+	if raddr := envMap["REMOTE_ADDR"]; !strings.HasPrefix(raddr, "127.0.0.1") {
+		t.Errorf("REMOTE_ADDR was %s\n", raddr)
 	}
 }
