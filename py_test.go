@@ -1,4 +1,4 @@
-// +build all
+// +build !smoke
 
 package gofcgisrv
 
