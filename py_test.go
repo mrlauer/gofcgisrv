@@ -33,7 +33,7 @@ func waitForConn(addr string, timeout time.Duration) error {
 }
 
 func TestPyServer(t *testing.T) {
-	cmd := exec.Command("python", "./testdata/cgi_test.py", "--port=9001")
+	cmd := exec.Command("python", "./testdata/cgi_test.py", "--host=127.0.0.1", "--port=9001")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err := cmd.Start()
@@ -65,7 +65,7 @@ func TestPyCGI(t *testing.T) {
 }
 
 func TestPySCGI(t *testing.T) {
-	cmd := exec.Command("python", "./testdata/cgi_test.py", "--scgi", "--port=9002")
+	cmd := exec.Command("python", "./testdata/cgi_test.py", "--scgi", "--host=127.0.0.1", "--port=9002")
 	// flup barfs some output. Why?? Seems wrong to me.
 	err := cmd.Start()
 	if err != nil {
@@ -76,6 +76,19 @@ func TestPySCGI(t *testing.T) {
 	s := NewSCGI("127.0.0.1:9002")
 	testRequester(t, httpTestData{
 		name:     "py scgi",
+		f:        s,
+		body:     strings.NewReader("This is a test"),
+		status:   200,
+		expected: "This is a test",
+	})
+}
+
+func TestPyFcgiStdin(t *testing.T) {
+	s := NewFCGIStdin("python", "./testdata/cgi_test.py", "--fcgi")
+	s.dialer.(*StdinDialer).Start()
+	defer s.dialer.(*StdinDialer).Close()
+	testRequester(t, httpTestData{
+		name:     "py fastcgi stdin",
 		f:        s,
 		body:     strings.NewReader("This is a test"),
 		status:   200,

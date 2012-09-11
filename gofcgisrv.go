@@ -37,11 +37,11 @@ func (f RequesterFunc) Request(env []string, stdin io.Reader, stdout io.Writer, 
 // Server is the external interface. It manages connections to a single FastCGI application.
 // A server may maintain many connections, each of which may multiplex many requests.
 type Server struct {
-	applicationAddr string
-	connections     []*conn
-	reqLock         sync.Mutex
-	reqCond         *sync.Cond
-	initialized     bool
+	dialer      Dialer
+	connections []*conn
+	reqLock     sync.Mutex
+	reqCond     *sync.Cond
+	initialized bool
 
 	// Parameters of the application
 	CanMultiplex bool
@@ -51,7 +51,18 @@ type Server struct {
 
 // NewServer creates a server that will attempt to connect to the application at the given address over TCP.
 func NewServer(applicationAddr string) *Server {
-	s := &Server{applicationAddr: applicationAddr}
+	s := &Server{}
+	s.dialer = TCPDialer{addr: applicationAddr}
+	s.MaxConns = 1
+	s.MaxRequests = 1
+	s.reqCond = sync.NewCond(&s.reqLock)
+	return s
+}
+
+// NewFCGIStdin creates a server that runs the app and connects over stdin.
+func NewFCGIStdin(app string, args ...string) *Server {
+	s := &Server{}
+	s.dialer = &StdinDialer{app: app, args: args}
 	s.MaxConns = 1
 	s.MaxRequests = 1
 	s.reqCond = sync.NewCond(&s.reqLock)
@@ -89,7 +100,7 @@ func (s *Server) processGetValuesResult(rec record) (int, error) {
 // PHP barfs on FCGI_GET_VALUES. I don't know why. Maybe it expects a different connection.
 // For now don't do it unless asked.
 func (s *Server) GetValues() error {
-	c, err := net.Dial("tcp", s.applicationAddr)
+	c, err := s.dialer.Dial()
 	time.AfterFunc(time.Second, func() { c.Close() })
 	if err != nil {
 		return err
@@ -147,7 +158,7 @@ func (s *Server) Request(env []string, stdin io.Reader, stdout io.Writer, stderr
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	env := HTTPEnv(nil, r)
 	buffer := bytes.NewBuffer(nil)
-	s.Request(env, r.Body, buffer, buffer)
+	s.Request(env, r.Body, buffer, os.Stderr)
 
 	// Add any headers produced by the application, and skip to the response.
 	ProcessResponse(buffer, w, r)
@@ -170,7 +181,7 @@ func (s *Server) newRequest() (*request, error) {
 		s.reqCond.Wait()
 	}
 	// We will always need to create a new connection, for now.
-	netconn, err := net.Dial("tcp", s.applicationAddr)
+	netconn, err := s.dialer.Dial()
 	if err != nil {
 		return nil, err
 	}
