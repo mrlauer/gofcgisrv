@@ -3,6 +3,7 @@ package gofcgisrv
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -11,15 +12,31 @@ import (
 	"strings"
 )
 
+func parseEnv(envStr string) (key, value string, err error) {
+	if idx := strings.Index(envStr, "="); idx > 0 {
+		return envStr[:idx], envStr[idx+1:], nil
+	}
+	return "", "", errors.New("Not a valid environment string.")
+}
+
 // HTTPEnv sets up an environment with standard HTTP/CGI variables.
 func HTTPEnv(start []string, r *http.Request) []string {
+	envMap := make(map[string]string)
 	env := make([]string, 0, 10)
-	env = append(env, start...)
-
-	appendEnv := func(key, value string) {
-		env = append(env, key+"="+value)
+	for _, e := range start {
+		if k, v, err := parseEnv(e); err == nil {
+			envMap[k] = v
+			env = append(env, e)
+		}
 	}
 
+	appendEnv := func(key, value string) {
+		if _, ok := envMap[key]; !ok {
+			env = append(env, key+"="+value)
+		}
+	}
+
+	appendEnv("SCRIPT_NAME", "")
 	appendEnv("REQUEST_METHOD", r.Method)
 	appendEnv("SERVER_PROTOCOL", "HTTP/1.1")
 	appendEnv("GATEWAY_INTERFACE", "CGI/1.1")
@@ -33,9 +50,7 @@ func HTTPEnv(start []string, r *http.Request) []string {
 	appendEnv("SERVER_NAME", host)
 	appendEnv("SERVER_PORT", port)
 
-	if len(r.URL.RawQuery) > 0 {
-		appendEnv("QUERY_STRING", r.URL.RawQuery)
-	}
+	appendEnv("QUERY_STRING", r.URL.RawQuery)
 	if t := r.Header.Get("Content-type"); t != "" {
 		appendEnv("CONTENT_TYPE", t)
 	}
