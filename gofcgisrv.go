@@ -36,7 +36,7 @@ func (f RequesterFunc) Request(env []string, stdin io.Reader, stdout io.Writer, 
 
 // Server is the external interface. It manages connections to a single FastCGI application.
 // A server may maintain many connections, each of which may multiplex many requests.
-type Server struct {
+type FCGIRequester struct {
 	dialer      Dialer
 	connections []*conn
 	reqLock     sync.Mutex
@@ -50,8 +50,8 @@ type Server struct {
 }
 
 // NewServer creates a server that will attempt to connect to the application at the given address over TCP.
-func NewServer(applicationAddr string) *Server {
-	s := &Server{}
+func NewFCGI(applicationAddr string) *FCGIRequester {
+	s := &FCGIRequester{}
 	s.dialer = TCPDialer{addr: applicationAddr}
 	s.MaxConns = 1
 	s.MaxRequests = 1
@@ -60,8 +60,8 @@ func NewServer(applicationAddr string) *Server {
 }
 
 // NewFCGIStdin creates a server that runs the app and connects over stdin.
-func NewFCGIStdin(app string, args ...string) *Server {
-	s := &Server{}
+func NewFCGIStdin(app string, args ...string) *FCGIRequester {
+	s := &FCGIRequester{}
 	s.dialer = &StdinDialer{app: app, args: args}
 	s.MaxConns = 1
 	s.MaxRequests = 1
@@ -69,7 +69,7 @@ func NewFCGIStdin(app string, args ...string) *Server {
 	return s
 }
 
-func (s *Server) processGetValuesResult(rec record) (int, error) {
+func (s *FCGIRequester) processGetValuesResult(rec record) (int, error) {
 	nproc := 0
 	switch rec.Type {
 	case fcgiGetValuesResult:
@@ -99,7 +99,7 @@ func (s *Server) processGetValuesResult(rec record) (int, error) {
 
 // PHP barfs on FCGI_GET_VALUES. I don't know why. Maybe it expects a different connection.
 // For now don't do it unless asked.
-func (s *Server) GetValues() error {
+func (s *FCGIRequester) GetValues() error {
 	c, err := s.dialer.Dial()
 	time.AfterFunc(time.Second, func() { c.Close() })
 	if err != nil {
@@ -122,7 +122,7 @@ func (s *Server) GetValues() error {
 
 // Request executes a request using env and stdin as inputs and stdout and stderr as outputs.
 // env should be a slice of name=value pairs. It blocks until the application has finished.
-func (s *Server) Request(env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
+func (s *FCGIRequester) Request(env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
 	// Get a request. We may have to wait for one to free up.
 	r, err := s.newRequest()
 	if err != nil {
@@ -155,7 +155,7 @@ func (s *Server) Request(env []string, stdin io.Reader, stdout io.Writer, stderr
 }
 
 // ServeHTTP serves an HTTP request.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (s *FCGIRequester) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	env := HTTPEnv(nil, r)
 	buffer := bytes.NewBuffer(nil)
 	s.Request(env, r.Body, buffer, os.Stderr)
@@ -165,7 +165,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // Should only be called if reqLock is held.
-func (s *Server) numRequests() int {
+func (s *FCGIRequester) numRequests() int {
 	var n = 0
 	for _, c := range s.connections {
 		n += c.numRequests()
@@ -173,7 +173,7 @@ func (s *Server) numRequests() int {
 	return n
 }
 
-func (s *Server) newRequest() (*request, error) {
+func (s *FCGIRequester) newRequest() (*request, error) {
 	// We may have to wait for one to become available
 	s.reqLock.Lock()
 	defer s.reqLock.Unlock()
@@ -190,7 +190,7 @@ func (s *Server) newRequest() (*request, error) {
 	return conn.newRequest(), nil
 }
 
-func (s *Server) releaseRequest(r *request) {
+func (s *FCGIRequester) releaseRequest(r *request) {
 	s.reqLock.Lock()
 	defer s.reqLock.Unlock()
 	r.conn.removeRequest(r)
@@ -211,14 +211,14 @@ func (s *Server) releaseRequest(r *request) {
 
 // Conn wraps a net.Conn. It may multiplex many requests.
 type conn struct {
-	server   *Server
+	server   *FCGIRequester
 	netconn  net.Conn
 	requests []*request
 	numReq   int
 	reqLock  sync.RWMutex
 }
 
-func newConn(s *Server, netconn net.Conn) *conn {
+func newConn(s *FCGIRequester, netconn net.Conn) *conn {
 	return &conn{server: s, netconn: netconn}
 }
 

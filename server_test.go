@@ -37,7 +37,7 @@ func TestFCGI(t *testing.T) {
 	defer l.Close()
 
 	// Now start an http server.
-	s := NewServer(addr)
+	s := NewFCGI(addr)
 	http.Handle("/", s)
 	server := httptest.NewServer(nil)
 	defer server.Close()
