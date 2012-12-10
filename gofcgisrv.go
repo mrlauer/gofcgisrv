@@ -49,10 +49,11 @@ type FCGIRequester struct {
 	MaxRequests  int
 }
 
-// NewServer creates a server that will attempt to connect to the application at the given address over TCP.
-func NewFCGI(applicationAddr string) *FCGIRequester {
+// NewServer creates a server that will attempt to connect to the application at the given address
+// over the specified network (typically 'tcp' or 'unix')
+func NewFCGI(net, applicationAddr string) *FCGIRequester {
 	s := &FCGIRequester{}
-	s.dialer = TCPDialer{addr: applicationAddr}
+	s.dialer = NetDialer{net: net, addr: applicationAddr}
 	s.MaxConns = 1
 	s.MaxRequests = 1
 	s.reqCond = sync.NewCond(&s.reqLock)
