@@ -43,7 +43,7 @@ func TestPyServer(t *testing.T) {
 	defer cmd.Process.Kill()
 
 	waitForConn("127.0.0.1:9001", time.Second)
-	s := NewFCGI("127.0.0.1:9001")
+	s := NewFCGI("tcp", "127.0.0.1:9001")
 	testRequester(t, httpTestData{
 		name:     "py fastcgi",
 		f:        s,
