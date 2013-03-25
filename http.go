@@ -58,7 +58,7 @@ func HTTPEnv(start []string, r *http.Request) []string {
 
 	for key := range r.Header {
 		upper := strings.ToUpper(key)
-		cgikey := "HTTP_" + strings.Replace(upper, "-", "_", 1)
+		cgikey := "HTTP_" + strings.Replace(upper, "-", "_", -1)
 		appendEnv(cgikey, r.Header.Get(key))
 	}
 	return env
