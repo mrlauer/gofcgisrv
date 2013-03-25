@@ -41,6 +41,7 @@ func HTTPEnv(start []string, r *http.Request) []string {
 	appendEnv("SERVER_PROTOCOL", "HTTP/1.1")
 	appendEnv("GATEWAY_INTERFACE", "CGI/1.1")
 	appendEnv("REQUEST_URI", r.URL.String())
+	appendEnv("HTTP_HOST=", r.Host)
 
 	host, port, err := net.SplitHostPort(r.Host)
 	if err != nil {
