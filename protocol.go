@@ -10,7 +10,7 @@ import (
 type requestId uint16
 type recordType uint8
 
-const fcgiVersion byte = 1
+const fcgiVersion uint8 = 1
 
 // Request types.
 const (
@@ -50,7 +50,7 @@ const (
 	fcgiMpxsConns = "FCGI_MPXS_CONNS"
 )
 
-var pad [7]byte
+var pad [255]byte
 
 type record struct {
 	Type    recordType
@@ -90,7 +90,7 @@ func _read(r io.Reader, data interface{}) error {
 
 func readRecord(r io.Reader) (record, error) {
 	var rec record
-	var version byte
+	var version uint8
 	var clength uint16
 	var plength uint8
 	if err := _read(r, &version); err != nil {
@@ -116,12 +116,12 @@ func readRecord(r io.Reader) (record, error) {
 	}
 	if clength != 0 {
 		rec.Content = make([]byte, clength)
-		if _, err := r.Read(rec.Content); err != nil {
+		if _, err := io.ReadFull(r, rec.Content); err != nil {
 			return rec, err
 		}
 	}
 	if plength != 0 {
-		if _, err := r.Read(pad[:plength]); err != nil {
+		if _, err := io.ReadFull(r, pad[:plength]); err != nil {
 			return rec, err
 		}
 	}
