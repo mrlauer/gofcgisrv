@@ -8,7 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/textproto"
+	"strconv"
 	"strings"
 )
 
@@ -41,6 +41,7 @@ func HTTPEnv(start []string, r *http.Request) []string {
 	appendEnv("SERVER_PROTOCOL", "HTTP/1.1")
 	appendEnv("GATEWAY_INTERFACE", "CGI/1.1")
 	appendEnv("REQUEST_URI", r.URL.String())
+	appendEnv("HTTP_HOST=", r.Host)
 
 	host, port, err := net.SplitHostPort(r.Host)
 	if err != nil {
@@ -57,7 +58,7 @@ func HTTPEnv(start []string, r *http.Request) []string {
 
 	for key := range r.Header {
 		upper := strings.ToUpper(key)
-		cgikey := "HTTP_" + strings.Replace(upper, "-", "_", 1)
+		cgikey := "HTTP_" + strings.Replace(upper, "-", "_", -1)
 		appendEnv(cgikey, r.Header.Get(key))
 	}
 	return env
@@ -104,32 +105,83 @@ func ServeHTTP(s Requester, env []string, w http.ResponseWriter, r *http.Request
 
 // ProcessResponse adds any returned header data to the response header and sends the rest
 // to the response body.
-func ProcessResponse(stdout io.Reader, w http.ResponseWriter, r *http.Request) error {
-	bufReader := bufio.NewReader(stdout)
-	mimeReader := textproto.NewReader(bufReader)
-	hdr, err := mimeReader.ReadMIMEHeader()
-	if err != nil {
-		// We got nothing! Assume there is an error. Should be more robust.
-		return err
-	}
-	if err == nil {
-		for k, vals := range hdr {
-			for _, v := range vals {
-				w.Header().Add(k, v)
+func ProcessResponse(stdoutRead io.Reader, rw http.ResponseWriter, req *http.Request) {
+	linebody := bufio.NewReaderSize(stdoutRead, 1024)
+	headers := make(http.Header)
+	statusCode := 0
+	for {
+		line, isPrefix, err := linebody.ReadLine()
+		if isPrefix {
+			rw.WriteHeader(http.StatusInternalServerError)
+			logger.Printf("fcgi: long header line from subprocess.")
+			return
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			rw.WriteHeader(http.StatusInternalServerError)
+			logger.Printf("fcgi: error reading headers: %v", err)
+			return
+		}
+		if len(line) == 0 {
+			break
+		}
+		parts := strings.SplitN(string(line), ":", 2)
+		if len(parts) < 2 {
+			logger.Printf("fcgi: bogus header line: %s", string(line))
+			continue
+		}
+		header, val := parts[0], parts[1]
+		header = strings.TrimSpace(header)
+		val = strings.TrimSpace(val)
+		switch {
+		case header == "Status":
+			if len(val) < 3 {
+				logger.Printf("fcgi: bogus status (short): %q", val)
+				return
 			}
+			code, err := strconv.Atoi(val[0:3])
+			if err != nil {
+				logger.Printf("fcgi: bogus status: %q", val)
+				logger.Printf("fcgi: line was %q", line)
+				return
+			}
+			statusCode = code
+		default:
+			headers.Add(header, val)
 		}
 	}
-	statusCode := http.StatusOK
-	if status := hdr.Get("Status"); status != "" {
-		delete(w.Header(), "Status")
-		// Parse the status code
-		var code int
-		if n, _ := fmt.Sscanf(status, "%d", &code); n == 1 {
-			statusCode = int(code)
+
+	/* // TODO : handle internal redirect ?
+	if loc := headers.Get("Location"); loc != "" {
+		if strings.HasPrefix(loc, "/") && h.PathLocationHandler != nil {
+			h.handleInternalRedirect(rw, req, loc)
+			return
+		}
+		if statusCode == 0 {
+			statusCode = http.StatusFound
 		}
 	}
-	// Are there other fields we need to rewrite? Probably!
-	w.WriteHeader(statusCode)
-	io.Copy(w, bufReader)
-	return nil
+	*/
+
+	if statusCode == 0 {
+		statusCode = http.StatusOK
+	}
+
+	// Copy headers to rw's headers, after we've decided not to
+	// go into handleInternalRedirect, which won't want its rw
+	// headers to have been touched.
+	for k, vv := range headers {
+		for _, v := range vv {
+			rw.Header().Add(k, v)
+		}
+	}
+
+	rw.WriteHeader(statusCode)
+
+	_, err := io.Copy(rw, linebody)
+	if err != nil {
+		logger.Printf("cgi: copy error: %v", err)
+	}
 }

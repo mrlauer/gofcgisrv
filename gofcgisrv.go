@@ -49,10 +49,11 @@ type FCGIRequester struct {
 	MaxRequests  int
 }
 
-// NewServer creates a server that will attempt to connect to the application at the given address over TCP.
-func NewFCGI(applicationAddr string) *FCGIRequester {
+// NewServer creates a server that will attempt to connect to the application at the given address
+// over the specified network (typically 'tcp' or 'unix')
+func NewFCGI(net, applicationAddr string) *FCGIRequester {
 	s := &FCGIRequester{}
-	s.dialer = TCPDialer{addr: applicationAddr}
+	s.dialer = NetDialer{net: net, addr: applicationAddr}
 	s.MaxConns = 1
 	s.MaxRequests = 1
 	s.reqCond = sync.NewCond(&s.reqLock)
@@ -124,7 +125,7 @@ func (s *FCGIRequester) GetValues() error {
 // env should be a slice of name=value pairs. It blocks until the application has finished.
 func (s *FCGIRequester) Request(env []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
 	// Get a request. We may have to wait for one to free up.
-	r, err := s.newRequest()
+	r, err := s.newRequest(stdout, stderr)
 	if err != nil {
 		return err
 	}
@@ -142,8 +143,6 @@ func (s *FCGIRequester) Request(env []string, stdin io.Reader, stdout io.Writer,
 	}
 	params.Close()
 
-	r.Stdout = stdout
-	r.Stderr = stderr
 	// Send stdin.
 	reqStdin := newStreamWriter(r.conn.netconn, fcgiStdin, r.id)
 	io.Copy(reqStdin, stdin)
@@ -173,7 +172,7 @@ func (s *FCGIRequester) numRequests() int {
 	return n
 }
 
-func (s *FCGIRequester) newRequest() (*request, error) {
+func (s *FCGIRequester) newRequest(stdout io.Writer, stderr io.Writer) (*request, error) {
 	// We may have to wait for one to become available
 	s.reqLock.Lock()
 	defer s.reqLock.Unlock()
@@ -186,8 +185,11 @@ func (s *FCGIRequester) newRequest() (*request, error) {
 		return nil, err
 	}
 	conn := newConn(s, netconn)
+	r := conn.newRequest()
+	r.Stdout = stdout
+	r.Stderr = stderr
 	go conn.Run()
-	return conn.newRequest(), nil
+	return r, nil
 }
 
 func (s *FCGIRequester) releaseRequest(r *request) {
