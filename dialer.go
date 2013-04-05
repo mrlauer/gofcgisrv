@@ -14,12 +14,13 @@ type Dialer interface {
 	Dial() (net.Conn, error)
 }
 
-type TCPDialer struct {
+type NetDialer struct {
+	net  string
 	addr string
 }
 
-func (d TCPDialer) Dial() (net.Conn, error) {
-	return net.Dial("tcp", d.addr)
+func (d NetDialer) Dial() (net.Conn, error) {
+	return net.Dial(d.net, d.addr)
 }
 
 // StdinDialer managers an app as a child process, creating a socket and passing it through stdin.
@@ -40,7 +41,7 @@ func (sd *StdinDialer) Dial() (net.Conn, error) {
 }
 
 func (sd *StdinDialer) Start() error {
-	// Create a socket. 
+	// Create a socket.
 	// We'll use the high-level net API, creating a listener that does all sorts
 	// of socket stuff, getting its file, and passing that (really just for its FD)
 	// to the child process.
